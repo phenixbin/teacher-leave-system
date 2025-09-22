@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师请假系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <!-- 引入Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#36CFC9',
+                        success: '#52C41A',
+                        danger: '#FF4D4F',
+                        warning: '#FAAD14',
+                        info: '#40A9FF',
+                        light: '#F5F7FA',
+                        dark: '#1D2129'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            }
+            .btn-hover {
+                @apply transition-all duration-300 hover:shadow-lg transform hover:-translate-y-0.5;
+            }
+            .form-input-focus {
+                @apply focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark">
+    <!-- 全局容器 -->
+    <div class="min-h-screen flex flex-col">
+        <!-- 顶部导航 -->
+        <header id="main-header" class="bg-white shadow-sm fixed w-full z-10 transition-all duration-300">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <i class="fa fa-graduation-cap text-primary text-2xl"></i>
+                    <h1 class="text-xl font-bold text-primary">教师请假系统</h1>
+                </div>
+                <div id="user-info" class="hidden items-center space-x-4">
+                    <span id="current-user" class="text-sm"></span>
+                    <button id="logout-btn" class="text-gray-500 hover:text-primary transition-colors">
+                        <i class="fa fa-sign-out mr-1"></i>退出
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="flex-grow pt-16">
+            <!-- 登录页面 -->
+            <section id="login-page" class="container mx-auto px-4 py-12 md:py-24">
+                <div class="max-w-md mx-auto">
+                    <div class="bg-white rounded-xl p-6 md:p-8 card-shadow transform transition-all duration-500 hover:shadow-xl">
+                        <div class="text-center mb-6">
+                            <i class="fa fa-university text-primary text-4xl mb-3"></i>
+                            <h2 class="text-2xl font-bold text-gray-800">用户登录</h2>
+                            <p class="text-gray-500 mt-1">请输入账号密码登录系统</p>
+                        </div>
+                        
+                        <form id="login-form" class="space-y-4">
+                            <div>
+                                <label for="login-role" class="block text-sm font-medium text-gray-700 mb-1">用户类型</label>
+                                <select id="login-role" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus">
+                                    <option value="applicant">申请人</option>
+                                    <option value="approver">审批人</option>
+                                    <option value="admin">管理员</option>
+                                    <option value="viewer">数据查看员</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label for="login-username" class="block text-sm font-medium text-gray-700 mb-1">账号</label>
+                                <input type="text" id="login-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" placeholder="请输入账号" required>
+                            </div>
+                            
+                            <div>
+                                <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                                <input type="password" id="login-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" placeholder="请输入密码" required>
+                            </div>
+                            
+                            <button type="submit" class="w-full bg-primary text-white py-2.5 px-4 rounded-lg font-medium btn-hover">
+                                <i class="fa fa-sign-in mr-1"></i>登录
+                            </button>
+                        </form>
+                        
+                        <div class="mt-5 text-center text-sm">
+                            <p class="text-gray-500">管理员初始账号: admin</p>
+                            <p class="text-gray-500">管理员初始密码: admin123</p>
+                            <p class="text-gray-500">数据查看员账号: viewer</p>
+                            <p class="text-gray-500">数据查看员密码: viewer123</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 申请端页面 -->
+            <section id="applicant-page" class="hidden container mx-auto px-4 py-6">
+                <div class="max-w-2xl mx-auto">
+                    <div class="bg-white rounded-xl p-5 md:p-6 card-shadow mb-6">
+                        <h2 class="text-xl font-bold mb-4 flex items-center">
+                            <i class="fa fa-pencil-square-o text-primary mr-2"></i>请假申请
+                        </h2>
+                        <form id="leave-form" class="space-y-4">
+                            <div>
+                                <label for="leave-type" class="block text-sm font-medium text-gray-700 mb-1">请假类型 <span class="text-danger">*</span></label>
+                                <select id="leave-type" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                                    <option value="">请选择请假类型</option>
+                                    <option value="病假">病假</option>
+                                    <option value="事假">事假</option>
+                                    <option value="婚假">婚假</option>
+                                    <option value="产假">产假</option>
+                                    <option value="丧假">丧假</option>
+                                    <option value="公假">公假</option>
+                                    <option value="其他">其他</option>
+                                </select>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">开始日期 <span class="text-danger">*</span></label>
+                                    <input type="date" id="start-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                                </div>
+                                <div>
+                                    <label for="start-session" class="block text-sm font-medium text-gray-700 mb-1">开始时段 <span class="text-danger">*</span></label>
+                                    <select id="start-session" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                                        <option value="上午">上午</option>
+                                        <option value="下午">下午</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">结束日期 <span class="text-danger">*</span></label>
+                                    <input type="date" id="end-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                                </div>
+                                <div>
+                                    <label for="end-session" class="block text-sm font-medium text-gray-700 mb-1">结束时段 <span class="text-danger">*</span></label>
+                                    <select id="end-session" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                                        <option value="上午">上午</option>
+                                        <option value="下午">下午</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label for="leave-reason" class="block text-sm font-medium text-gray-700 mb-1">请假原因 <span class="text-danger">*</span></label>
+                                <textarea id="leave-reason" rows="4" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" placeholder="请详细描述请假原因" required></textarea>
+                            </div>
+                            
+                            <div>
+                                <label for="emergency-contact" class="block text-sm font-medium text-gray-700 mb-1">紧急联系电话</label>
+                                <input type="tel" id="emergency-contact" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" placeholder="请输入紧急联系人电话（选填）">
+                            </div>
+                            
+                            <div class="pt-2 flex justify-end space-x-3">
+                                <button type="button" id="reset-leave-form" class="px-5 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                                    重置
+                                </button>
+                                <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg btn-hover">
+                                    <i class="fa fa-paper-plane mr-1"></i>提交申请
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl p-5 md:p-6 card-shadow">
+                        <h2 class="text-xl font-bold mb-4 flex items-center">
+                            <i class="fa fa-history text-primary mr-2"></i>我的请假记录
+                        </h2>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead>
+                                    <tr>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">请假类型</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="applicant-leave-history" class="bg-white divide-y divide-gray-200">
+                                    <!-- 请假记录将通过JS动态填充 -->
+                                    <tr class="text-center">
+                                        <td colspan="4" class="px-3 py-6 text-gray-500">暂无请假记录</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 审批端页面 -->
+            <section id="approver-page" class="hidden container mx-auto px-4 py-6">
+                <div class="bg-white rounded-xl p-5 md:p-6 card-shadow mb-6">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-check-square-o text-primary mr-2"></i>待审批请假
+                        </h2>
+                        <div class="mt-3 md:mt-0 flex space-x-2">
+                            <select id="filter-status" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm form-input-focus">
+                                <option value="all">全部状态</option>
+                                <option value="pending">待审批</option>
+                                <option value="approved">已批准</option>
+                                <option value="rejected">已拒绝</option>
+                            </select>
+                            <select id="filter-type" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm form-input-focus">
+                                <option value="all">全部类型</option>
+                                <option value="病假">病假</option>
+                                <option value="事假">事假</option>
+                                <option value="婚假">婚假</option>
+                                <option value="产假">产假</option>
+                                <option value="丧假">丧假</option>
+                                <option value="公假">公假</option>
+                                <option value="其他">其他</option>
+                            </select>
+                            <button id="export-approver-data" class="px-3 py-1.5 bg-primary text-white rounded-lg text-sm btn-hover">
+                                <i class="fa fa-download mr-1"></i>导出数据
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">申请人</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">请假类型</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="approver-leave-list" class="bg-white divide-y divide-gray-200">
+                                <!-- 待审批列表将通过JS动态填充 -->
+                                <tr class="text-center">
+                                    <td colspan="5" class="px-3 py-6 text-gray-500">暂无请假申请</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 管理端页面 -->
+            <section id="admin-page" class="hidden container mx-auto px-4 py-6">
+                <div class="bg-white rounded-xl p-5 md:p-6 card-shadow mb-6">
+                    <ul class="flex border-b border-gray-200 mb-4">
+                        <li class="mr-2">
+                            <button id="tab-user-management" class="py-2 px-4 text-primary border-b-2 border-primary font-medium">用户管理</button>
+                        </li>
+                        <li class="mr-2">
+                            <button id="tab-password-change" class="py-2 px-4 text-gray-500 hover:text-primary">修改密码</button>
+                        </li>
+                    </ul>
+                    
+                    <!-- 用户管理标签内容 -->
+                    <div id="content-user-management">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4">
+                            <h2 class="text-xl font-bold flex items-center">
+                                <i class="fa fa-users text-primary mr-2"></i>用户管理
+                            </h2>
+                            <button id="add-user-btn" class="mt-3 md:mt-0 px-4 py-2 bg-primary text-white rounded-lg btn-hover">
+                                <i class="fa fa-plus mr-1"></i>新增用户
+                            </button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                            <div class="bg-light rounded-lg p-3">
+                                <div class="text-sm text-gray-500">申请人总数</div>
+                                <div class="text-2xl font-bold text-primary" id="applicant-count">0</div>
+                            </div>
+                            <div class="bg-light rounded-lg p-3">
+                                <div class="text-sm text-gray-500">审批人总数</div>
+                                <div class="text-2xl font-bold text-primary" id="approver-count">0</div>
+                            </div>
+                            <div class="bg-light rounded-lg p-3">
+                                <div class="text-sm text-gray-500">总请假申请数</div>
+                                <div class="text-2xl font-bold text-primary" id="total-leave-count">0</div>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead>
+                                    <tr>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">账号</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户类型</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属审批人</th>
+                                        <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="user-list" class="bg-white divide-y divide-gray-200">
+                                    <!-- 用户列表将通过JS动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- 修改密码标签内容 -->
+                    <div id="content-password-change" class="hidden">
+                        <h2 class="text-xl font-bold mb-4 flex items-center">
+                            <i class="fa fa-key text-primary mr-2"></i>修改密码
+                        </h2>
+                        <form id="change-password-form" class="max-w-md space-y-4">
+                            <div>
+                                <label for="current-password" class="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+                                <input type="password" id="current-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                            </div>
+                            
+                            <div>
+                                <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                                <input type="password" id="new-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                            </div>
+                            
+                            <div>
+                                <label for="confirm-password" class="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+                                <input type="password" id="confirm-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                            </div>
+                            
+                            <div class="pt-2 flex justify-end">
+                                <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg btn-hover">
+                                    <i class="fa fa-save mr-1"></i>保存修改
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 数据查看员页面 -->
+            <section id="viewer-page" class="hidden container mx-auto px-4 py-6">
+                <div class="bg-white rounded-xl p-5 md:p-6 card-shadow">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-bar-chart text-primary mr-2"></i>全校请假数据
+                        </h2>
+                        <div class="mt-3 md:mt-0 flex space-x-2">
+                            <select id="viewer-filter-status" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm form-input-focus">
+                                <option value="all">全部状态</option>
+                                <option value="pending">待审批</option>
+                                <option value="approved">已批准</option>
+                                <option value="rejected">已拒绝</option>
+                            </select>
+                            <select id="viewer-filter-type" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm form-input-focus">
+                                <option value="all">全部类型</option>
+                                <option value="病假">病假</option>
+                                <option value="事假">事假</option>
+                                <option value="婚假">婚假</option>
+                                <option value="产假">产假</option>
+                                <option value="丧假">丧假</option>
+                                <option value="公假">公假</option>
+                                <option value="其他">其他</option>
+                            </select>
+                            <button id="export-all-data" class="px-3 py-1.5 bg-primary text-white rounded-lg text-sm btn-hover">
+                                <i class="fa fa-download mr-1"></i>导出全部数据
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-light rounded-lg p-4">
+                            <div class="text-sm text-gray-500">待审批</div>
+                            <div class="text-2xl font-bold text-warning" id="pending-count">0</div>
+                        </div>
+                        <div class="bg-light rounded-lg p-4">
+                            <div class="text-sm text-gray-500">已批准</div>
+                            <div class="text-2xl font-bold text-success" id="approved-count">0</div>
+                        </div>
+                        <div class="bg-light rounded-lg p-4">
+                            <div class="text-sm text-gray-500">已拒绝</div>
+                            <div class="text-2xl font-bold text-danger" id="rejected-count">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3">请假类型分布</h3>
+                        <div class="h-64">
+                            <canvas id="leave-type-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">申请人</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">审批人</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">请假类型</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                    <th class="px-3 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">申请时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-leave-list" class="bg-white divide-y divide-gray-200">
+                                <!-- 所有请假记录将通过JS动态填充 -->
+                                <tr class="text-center">
+                                    <td colspan="6" class="px-3 py-6 text-gray-500">暂无请假记录</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 页脚 -->
+        <footer class="bg-white border-t border-gray-200 py-4">
+            <div class="container mx-auto px-4 text-center text-sm text-gray-500">
+                <p>教师请假系统 &copy; 2023</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 请假详情模态框 -->
+    <div id="leave-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-95 opacity-0" id="modal-content">
+            <div class="p-5 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-bold" id="modal-title">请假详情</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4" id="leave-detail-content">
+                <!-- 请假详情将通过JS动态填充 -->
+            </div>
+            <div class="p-5 border-t border-gray-200 flex justify-end space-x-3" id="modal-actions">
+                <!-- 审批按钮将通过JS动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增用户模态框 -->
+    <div id="add-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl max-w-md w-full mx-4 transform transition-all duration-300 scale-95 opacity-0" id="add-user-modal-content">
+            <div class="p-5 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-bold">新增用户</h3>
+                <button id="close-add-user-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="add-user-form" class="p-5 space-y-4">
+                <div>
+                    <label for="new-username" class="block text-sm font-medium text-gray-700 mb-1">账号</label>
+                    <input type="text" id="new-username" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                </div>
+                
+                <div>
+                    <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="new-user-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                </div>
+                
+                <div>
+                    <label for="new-user-role" class="block text-sm font-medium text-gray-700 mb-1">用户类型</label>
+                    <select id="new-user-role" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus" required>
+                        <option value="applicant">申请人</option>
+                        <option value="approver">审批人</option>
+                    </select>
+                </div>
+                
+                <div id="approver-select-container">
+                    <label for="new-user-approver" class="block text-sm font-medium text-gray-700 mb-1">所属审批人</label>
+                    <select id="new-user-approver" class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus">
+                        <!-- 审批人列表将通过JS动态填充 -->
+                    </select>
+                </div>
+                
+                <div class="pt-2 flex justify-end">
+                    <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg btn-hover">
+                        <i class="fa fa-save mr-1"></i>保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 通知提示框 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-dark text-white px-4 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center">
+        <i id="toast-icon" class="fa fa-info-circle mr-2"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        // Firebase配置 - 请替换为你自己的Firebase项目配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyDkX0dbitttQqk5bUsk9bQRXmQerZavqdU",
+            authDomain: "teacher-leave-system-rongyi.firebaseapp.com",
+            databaseURL: "https://teacher-leave-system-rongyi-default-rtdb.firebaseio.com",
+            projectId: "teacher-leave-system-rongyi",
+            storageBucket: "teacher-leave-system-rongyi.firebasestorage.app",
+            messagingSenderId: "51632019167",
+            appId: "1:51632019167:web:ce62fee51b615869eb3b6a",
+            measurementId: "G-ZWNR2TQ78S"
+        };
+
+        // 初始化Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        // 数据库引用
+        const usersRef = database.ref('users');
+        const leavesRef = database.ref('leaves');
+        
+        // 初始化数据
+        function initData() {
+            // 检查是否已有管理员和查看员账号，若无则创建
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userList = Object.values(users);
+                
+                // 检查管理员账号是否存在
+                const hasAdmin = userList.some(user => user.username === 'admin' && user.role === 'admin');
+                if (!hasAdmin) {
+                    const newUserRef = usersRef.push();
+                    newUserRef.set({
+                        username: 'admin',
+                        password: 'admin123',
+                        role: 'admin'
+                    });
+                }
+                
+                // 检查数据查看员账号是否存在
+                const hasViewer = userList.some(user => user.username === 'viewer' && user.role === 'viewer');
+                if (!hasViewer) {
+                    const newUserRef = usersRef.push();
+                    newUserRef.set({
+                        username: 'viewer',
+                        password: 'viewer123',
+                        role: 'viewer'
+                    });
+                }
+            });
+        }
+        
+        // 显示提示消息
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastIcon = document.getElementById('toast-icon');
+            const toastMessage = document.getElementById('toast-message');
+            
+            toastMessage.textContent = message;
+            
+            // 设置图标
+            toastIcon.className = '';
+            switch(type) {
+                case 'success':
+                    toastIcon.className = 'fa fa-check-circle mr-2';
+                    toast.classList.add('bg-success');
+                    toast.classList.remove('bg-danger', 'bg-warning', 'bg-dark');
+                    break;
+                case 'error':
+                    toastIcon.className = 'fa fa-exclamation-circle mr-2';
+                    toast.classList.add('bg-danger');
+                    toast.classList.remove('bg-success', 'bg-warning', 'bg-dark');
+                    break;
+                case 'warning':
+                    toastIcon.className = 'fa fa-exclamation-triangle mr-2';
+                    toast.classList.add('bg-warning');
+                    toast.classList.remove('bg-success', 'bg-danger', 'bg-dark');
+                    break;
+                default:
+                    toastIcon.className = 'fa fa-info-circle mr-2';
+                    toast.classList.add('bg-dark');
+                    toast.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+            }
+            
+            // 显示提示
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            
+            // 3秒后隐藏
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+        
+        // 切换页面
+        function showPage(pageId) {
+            // 隐藏所有页面
+            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('applicant-page').classList.add('hidden');
+            document.getElementById('approver-page').classList.add('hidden');
+            document.getElementById('admin-page').classList.add('hidden');
+            document.getElementById('viewer-page').classList.add('hidden');
+            
+            // 显示目标页面
+            document.getElementById(pageId).classList.remove('hidden');
+        }
+        
+        // 登录处理
+        function handleLogin(event) {
+            event.preventDefault();
+            
+            const role = document.getElementById('login-role').value;
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userEntries = Object.entries(users);
+                
+                // 查找匹配的用户
+                let foundUser = null;
+                let userId = null;
+                
+                for (const [id, user] of userEntries) {
+                    if (user.username === username && user.password === password && user.role === role) {
+                        foundUser = user;
+                        userId = id;
+                        break;
+                    }
+                }
+                
+                if (foundUser) {
+                    // 保存当前登录用户（包含Firebase的ID）
+                    const userData = { ...foundUser, id: userId };
+                    localStorage.setItem('currentUser', JSON.stringify(userData));
+                    
+                    // 更新用户信息显示
+                    document.getElementById('current-user').textContent = username;
+                    document.getElementById('user-info').classList.remove('hidden');
+                    document.getElementById('user-info').classList.add('flex');
+                    
+                    // 显示对应页面
+                    switch(role) {
+                        case 'applicant':
+                            showPage('applicant-page');
+                            loadApplicantLeaveHistory();
+                            break;
+                        case 'approver':
+                            showPage('approver-page');
+                            loadApproverLeaveList();
+                            break;
+                        case 'admin':
+                            showPage('admin-page');
+                            loadUserList();
+                            break;
+                        case 'viewer':
+                            showPage('viewer-page');
+                            loadAllLeaveData();
+                            initLeaveTypeChart();
+                            break;
+                    }
+                    
+                    // 重置登录表单
+                    document.getElementById('login-form').reset();
+                    showToast('登录成功');
+                } else {
+                    showToast('账号或密码错误', 'error');
+                }
+            }).catch(error => {
+                showToast('登录失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 登出处理
+        function handleLogout() {
+            // 清除当前用户
+            localStorage.removeItem('currentUser');
+            
+            // 隐藏用户信息
+            document.getElementById('user-info').classList.add('hidden');
+            document.getElementById('user-info').classList.remove('flex');
+            
+            // 显示登录页面
+            showPage('login-page');
+            showToast('已成功登出');
+        }
+        
+        // 提交请假申请
+        function submitLeaveApplication(event) {
+            event.preventDefault();
+            
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (!currentUser) {
+                showToast('请先登录', 'error');
+                return;
+            }
+            
+            const leaveType = document.getElementById('leave-type').value;
+            const startDate = document.getElementById('start-date').value;
+            const startSession = document.getElementById('start-session').value;
+            const endDate = document.getElementById('end-date').value;
+            const endSession = document.getElementById('end-session').value;
+            const reason = document.getElementById('leave-reason').value;
+            const emergencyContact = document.getElementById('emergency-contact').value;
+            
+            // 验证日期
+            if (new Date(startDate) > new Date(endDate)) {
+                showToast('开始日期不能晚于结束日期', 'error');
+                return;
+            }
+            
+            if (new Date(startDate) === new Date(endDate) && startSession === '下午' && endSession === '上午') {
+                showToast('开始时间不能晚于结束时间', 'error');
+                return;
+            }
+            
+            // 获取当前用户的审批人
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userEntries = Object.values(users);
+                const approver = userEntries.find(u => u.username === currentUser.approver);
+                
+                if (!approver) {
+                    showToast('未找到对应的审批人，请联系管理员', 'error');
+                    return;
+                }
+                
+                // 创建新请假申请
+                const newLeaveRef = leavesRef.push();
+                newLeaveRef.set({
+                    applicant: currentUser.username,
+                    approver: currentUser.approver,
+                    type: leaveType,
+                    startDate: startDate,
+                    startSession: startSession,
+                    endDate: endDate,
+                    endSession: endSession,
+                    reason: reason,
+                    emergencyContact: emergencyContact,
+                    status: 'pending', // pending, approved, rejected
+                    applyTime: new Date().toISOString(),
+                    approveTime: null,
+                    comment: ''
+                }).then(() => {
+                    // 重置表单
+                    document.getElementById('leave-form').reset();
+                    
+                    // 更新列表
+                    loadApplicantLeaveHistory();
+                    
+                    showToast('请假申请提交成功，等待审批', 'success');
+                }).catch(error => {
+                    showToast('提交失败: ' + error.message, 'error');
+                });
+            });
+        }
+        
+        // 加载申请人的请假历史
+        function loadApplicantLeaveHistory() {
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (!currentUser) return;
+            
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.entries(leaves);
+                
+                // 筛选当前用户的请假记录并排序
+                const userLeaves = leaveEntries
+                    .map(([id, leave]) => ({ id, ...leave }))
+                    .filter(leave => leave.applicant === currentUser.username)
+                    .sort((a, b) => new Date(b.applyTime) - new Date(a.applyTime));
+                
+                const historyContainer = document.getElementById('applicant-leave-history');
+                
+                if (userLeaves.length === 0) {
+                    historyContainer.innerHTML = `
+                        <tr class="text-center">
+                            <td colspan="4" class="px-3 py-6 text-gray-500">暂无请假记录</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                historyContainer.innerHTML = '';
+                
+                userLeaves.forEach(leave => {
+                    let statusClass = '';
+                    let statusText = '';
+                    
+                    switch(leave.status) {
+                        case 'pending':
+                            statusClass = 'bg-yellow-100 text-yellow-800';
+                            statusText = '待审批';
+                            break;
+                        case 'approved':
+                            statusClass = 'bg-green-100 text-green-800';
+                            statusText = '已批准';
+                            break;
+                        case 'rejected':
+                            statusClass = 'bg-red-100 text-red-800';
+                            statusText = '已拒绝';
+                            break;
+                    }
+                    
+                    const startDateFormatted = formatDate(leave.startDate);
+                    const endDateFormatted = formatDate(leave.endDate);
+                    
+                    let dateRange = '';
+                    if (leave.startDate === leave.endDate) {
+                        dateRange = `${startDateFormatted} ${leave.startSession}`;
+                        if (leave.startSession !== leave.endSession) {
+                            dateRange += ` - ${leave.endSession}`;
+                        }
+                    } else {
+                        dateRange = `${startDateFormatted} ${leave.startSession} - ${endDateFormatted} ${leave.endSession}`;
+                    }
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.type}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${dateRange}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                                ${statusText}
+                            </span>
+                        </td>
+                        <td class="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <button class="text-primary hover:text-primary/80 view-leave-detail" data-id="${leave.id}">
+                                查看详情
+                            </button>
+                        </td>
+                    `;
+                    
+                    historyContainer.appendChild(row);
+                });
+                
+                // 添加查看详情事件监听
+                document.querySelectorAll('.view-leave-detail').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const leaveId = button.getAttribute('data-id');
+                        showLeaveDetail(leaveId, false);
+                    });
+                });
+            }).catch(error => {
+                showToast('加载数据失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 加载审批人的请假列表
+        function loadApproverLeaveList() {
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (!currentUser) return;
+            
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.entries(leaves);
+                
+                // 筛选当前审批人的请假记录并排序
+                let approverLeaves = leaveEntries
+                    .map(([id, leave]) => ({ id, ...leave }))
+                    .filter(leave => leave.approver === currentUser.username)
+                    .sort((a, b) => new Date(b.applyTime) - new Date(a.applyTime));
+                
+                // 应用筛选
+                const statusFilter = document.getElementById('filter-status').value;
+                const typeFilter = document.getElementById('filter-type').value;
+                
+                if (statusFilter !== 'all') {
+                    approverLeaves = approverLeaves.filter(leave => leave.status === statusFilter);
+                }
+                
+                if (typeFilter !== 'all') {
+                    approverLeaves = approverLeaves.filter(leave => leave.type === typeFilter);
+                }
+                
+                const listContainer = document.getElementById('approver-leave-list');
+                
+                if (approverLeaves.length === 0) {
+                    listContainer.innerHTML = `
+                        <tr class="text-center">
+                            <td colspan="5" class="px-3 py-6 text-gray-500">暂无请假申请</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                listContainer.innerHTML = '';
+                
+                approverLeaves.forEach(leave => {
+                    let statusClass = '';
+                    let statusText = '';
+                    
+                    switch(leave.status) {
+                        case 'pending':
+                            statusClass = 'bg-yellow-100 text-yellow-800';
+                            statusText = '待审批';
+                            break;
+                        case 'approved':
+                            statusClass = 'bg-green-100 text-green-800';
+                            statusText = '已批准';
+                            break;
+                        case 'rejected':
+                            statusClass = 'bg-red-100 text-red-800';
+                            statusText = '已拒绝';
+                            break;
+                    }
+                    
+                    const startDateFormatted = formatDate(leave.startDate);
+                    const endDateFormatted = formatDate(leave.endDate);
+                    
+                    let dateRange = '';
+                    if (leave.startDate === leave.endDate) {
+                        dateRange = `${startDateFormatted} ${leave.startSession}`;
+                        if (leave.startSession !== leave.endSession) {
+                            dateRange += ` - ${leave.endSession}`;
+                        }
+                    } else {
+                        dateRange = `${startDateFormatted} ${leave.startSession} - ${endDateFormatted} ${leave.endSession}`;
+                    }
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.applicant}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.type}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${dateRange}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                                ${statusText}
+                            </span>
+                        </td>
+                        <td class="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <button class="text-primary hover:text-primary/80 view-leave-detail" data-id="${leave.id}">
+                                查看详情
+                            </button>
+                        </td>
+                    `;
+                    
+                    listContainer.appendChild(row);
+                });
+                
+                // 添加查看详情事件监听
+                document.querySelectorAll('.view-leave-detail').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const leaveId = button.getAttribute('data-id');
+                        showLeaveDetail(leaveId, true);
+                    });
+                });
+            }).catch(error => {
+                showToast('加载数据失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 显示请假详情
+        function showLeaveDetail(leaveId, isApprover) {
+            leavesRef.child(leaveId).once('value').then(snapshot => {
+                const leave = snapshot.val();
+                if (!leave) return;
+                
+                const modal = document.getElementById('leave-detail-modal');
+                const modalContent = document.getElementById('modal-content');
+                const detailContent = document.getElementById('leave-detail-content');
+                const modalActions = document.getElementById('modal-actions');
+                const modalTitle = document.getElementById('modal-title');
+                
+                // 设置标题
+                modalTitle.textContent = `请假详情 #${leaveId.substring(leaveId.length - 4)}`;
+                
+                // 格式化日期
+                const startDateFormatted = formatDate(leave.startDate);
+                const endDateFormatted = formatDate(leave.endDate);
+                const applyTimeFormatted = formatDateTime(leave.applyTime);
+                let approveTimeFormatted = '未处理';
+                if (leave.approveTime) {
+                    approveTimeFormatted = formatDateTime(leave.approveTime);
+                }
+                
+                // 格式化时间段
+                let dateRange = '';
+                if (leave.startDate === leave.endDate) {
+                    dateRange = `${startDateFormatted} ${leave.startSession}`;
+                    if (leave.startSession !== leave.endSession) {
+                        dateRange += ` - ${leave.endSession}`;
+                    }
+                } else {
+                    dateRange = `${startDateFormatted} ${leave.startSession} - ${endDateFormatted} ${leave.endSession}`;
+                }
+                
+                // 设置状态样式
+                let statusClass = '';
+                let statusText = '';
+                
+                switch(leave.status) {
+                    case 'pending':
+                        statusClass = 'text-yellow-600';
+                        statusText = '待审批';
+                        break;
+                    case 'approved':
+                        statusClass = 'text-green-600';
+                        statusText = '已批准';
+                        break;
+                    case 'rejected':
+                        statusClass = 'text-red-600';
+                        statusText = '已拒绝';
+                        break;
+                }
+                
+                // 填充详情内容
+                detailContent.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-sm text-gray-500">申请人</div>
+                            <div class="font-medium">${leave.applicant}</div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-500">审批人</div>
+                            <div class="font-medium">${leave.approver}</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm text-gray-500">请假类型</div>
+                        <div class="font-medium">${leave.type}</div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm text-gray-500">请假时间</div>
+                        <div class="font-medium">${dateRange}</div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm text-gray-500">请假原因</div>
+                        <div class="font-medium whitespace-pre-line">${leave.reason}</div>
+                    </div>
+                    
+                    ${leave.emergencyContact ? `
+                    <div>
+                        <div class="text-sm text-gray-500">紧急联系电话</div>
+                        <div class="font-medium">${leave.emergencyContact}</div>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-sm text-gray-500">申请时间</div>
+                            <div class="font-medium">${applyTimeFormatted}</div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-500">审批时间</div>
+                            <div class="font-medium">${approveTimeFormatted}</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm text-gray-500">状态</div>
+                        <div class="font-medium ${statusClass}">${statusText}</div>
+                    </div>
+                    
+                    ${leave.comment ? `
+                    <div>
+                        <div class="text-sm text-gray-500">审批意见</div>
+                        <div class="font-medium">${leave.comment}</div>
+                    </div>
+                    ` : ''}
+                `;
+                
+                // 设置操作按钮
+                modalActions.innerHTML = '';
+                
+                if (isApprover && leave.status === 'pending') {
+                    // 审批人且状态为待审批，显示审批按钮
+                    const approveBtn = document.createElement('button');
+                    approveBtn.className = 'px-4 py-2 bg-success text-white rounded-lg btn-hover';
+                    approveBtn.innerHTML = '<i class="fa fa-check mr-1"></i>批准';
+                    approveBtn.addEventListener('click', () => {
+                        handleApproval(leaveId, 'approved');
+                    });
+                    
+                    const rejectBtn = document.createElement('button');
+                    rejectBtn.className = 'px-4 py-2 bg-danger text-white rounded-lg btn-hover';
+                    rejectBtn.innerHTML = '<i class="fa fa-times mr-1"></i>拒绝';
+                    rejectBtn.addEventListener('click', () => {
+                        handleApproval(leaveId, 'rejected');
+                    });
+                    
+                    modalActions.appendChild(rejectBtn);
+                    modalActions.appendChild(approveBtn);
+                } else {
+                    // 显示关闭按钮
+                    const closeBtn = document.createElement('button');
+                    closeBtn.className = 'px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors';
+                    closeBtn.innerHTML = '关闭';
+                    closeBtn.addEventListener('click', closeDetailModal);
+                    
+                    modalActions.appendChild(closeBtn);
+                }
+                
+                // 显示模态框
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modalContent.classList.remove('scale-95', 'opacity-0');
+                    modalContent.classList.add('scale-100', 'opacity-100');
+                }, 10);
+            }).catch(error => {
+                showToast('加载详情失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 处理审批
+        function handleApproval(leaveId, action) {
+            // 获取审批意见
+            let comment = '';
+            if (action === 'rejected') {
+                comment = prompt('请输入拒绝原因：', '');
+                if (comment === null) return; // 用户取消
+            }
+            
+            // 更新请假状态
+            leavesRef.child(leaveId).update({
+                status: action,
+                approveTime: new Date().toISOString(),
+                comment: comment
+            }).then(() => {
+                // 关闭模态框
+                closeDetailModal();
+                
+                // 更新列表
+                loadApproverLeaveList();
+                
+                // 显示提示
+                showToast(action === 'approved' ? '已批准请假申请' : '已拒绝请假申请', 'success');
+            }).catch(error => {
+                showToast('审批操作失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 关闭详情模态框
+        function closeDetailModal() {
+            const modal = document.getElementById('leave-detail-modal');
+            const modalContent = document.getElementById('modal-content');
+            
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+        
+        // 加载用户列表（管理员）
+        function loadUserList() {
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userEntries = Object.entries(users);
+                const userListContainer = document.getElementById('user-list');
+                
+                // 过滤掉管理员和查看员
+                const manageableUsers = userEntries
+                    .map(([id, user]) => ({ id, ...user }))
+                    .filter(user => user.role !== 'admin' && user.role !== 'viewer');
+                
+                // 更新统计
+                document.getElementById('applicant-count').textContent = manageableUsers.filter(u => u.role === 'applicant').length;
+                document.getElementById('approver-count').textContent = manageableUsers.filter(u => u.role === 'approver').length;
+                
+                // 获取请假总数
+                leavesRef.once('value').then(leavesSnapshot => {
+                    const leaves = leavesSnapshot.val() || {};
+                    document.getElementById('total-leave-count').textContent = Object.keys(leaves).length;
+                });
+                
+                // 清空列表
+                userListContainer.innerHTML = '';
+                
+                if (manageableUsers.length === 0) {
+                    userListContainer.innerHTML = `
+                        <tr class="text-center">
+                            <td colspan="4" class="px-3 py-6 text-gray-500">暂无用户数据</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                // 添加用户到列表
+                manageableUsers.forEach(user => {
+                    const roleText = user.role === 'applicant' ? '申请人' : '审批人';
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-3 py-4 whitespace-nowrap">${user.username}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${roleText}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${user.role === 'applicant' ? user.approver || '未设置' : '-'}</td>
+                        <td class="px-3 py-4 whitespace-nowrap text-sm font-medium">
+                            <button class="text-danger hover:text-danger/80 delete-user" data-id="${user.id}" data-username="${user.username}">
+                                删除
+                            </button>
+                        </td>
+                    `;
+                    
+                    userListContainer.appendChild(row);
+                });
+                
+                // 添加删除事件监听
+                document.querySelectorAll('.delete-user').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const userId = button.getAttribute('data-id');
+                        const username = button.getAttribute('data-username');
+                        if (confirm(`确定要删除用户 ${username} 吗？`)) {
+                            deleteUser(userId, username);
+                        }
+                    });
+                });
+                
+                // 更新审批人选择列表
+                updateApproverSelect();
+            }).catch(error => {
+                showToast('加载用户列表失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 删除用户
+        function deleteUser(userId, username) {
+            // 先删除用户
+            usersRef.child(userId).remove()
+                .then(() => {
+                    // 如果删除的是审批人，需要处理相关申请人
+                    usersRef.once('value').then(snapshot => {
+                        const users = snapshot.val() || {};
+                        const userEntries = Object.entries(users);
+                        
+                        // 查找所有以该审批人为审批人的申请人
+                        const applicantsToUpdate = userEntries
+                            .filter(([id, user]) => user.role === 'applicant' && user.approver === username)
+                            .map(([id, user]) => id);
+                        
+                        // 清除这些申请人的审批人信息
+                        const updates = {};
+                        applicantsToUpdate.forEach(applicantId => {
+                            updates[applicantId + '/approver'] = null;
+                        });
+                        
+                        return usersRef.update(updates);
+                    })
+                    .then(() => {
+                        loadUserList();
+                        showToast('用户已删除', 'success');
+                    });
+                })
+                .catch(error => {
+                    showToast('删除用户失败: ' + error.message, 'error');
+                });
+        }
+        
+        // 更新审批人选择列表
+        function updateApproverSelect() {
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userEntries = Object.entries(users);
+                const approvers = userEntries
+                    .map(([id, user]) => user)
+                    .filter(user => user.role === 'approver');
+                
+                const selectElement = document.getElementById('new-user-approver');
+                selectElement.innerHTML = '';
+                
+                if (approvers.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '暂无审批人，请先创建审批人';
+                    option.disabled = true;
+                    selectElement.appendChild(option);
+                } else {
+                    approvers.forEach(approver => {
+                        const option = document.createElement('option');
+                        option.value = approver.username;
+                        option.textContent = approver.username;
+                        selectElement.appendChild(option);
+                    });
+                }
+            });
+        }
+        
+        // 显示新增用户模态框
+        function showAddUserModal() {
+            const modal = document.getElementById('add-user-modal');
+            const modalContent = document.getElementById('add-user-modal-content');
+            
+            // 重置表单
+            document.getElementById('add-user-form').reset();
+            
+            // 显示模态框
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+            
+            // 处理用户类型切换
+            handleUserRoleChange();
+        }
+        
+        // 关闭新增用户模态框
+        function closeAddUserModal() {
+            const modal = document.getElementById('add-user-modal');
+            const modalContent = document.getElementById('add-user-modal-content');
+            
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+        
+        // 处理用户类型切换
+        function handleUserRoleChange() {
+            const role = document.getElementById('new-user-role').value;
+            const approverContainer = document.getElementById('approver-select-container');
+            
+            if (role === 'applicant') {
+                approverContainer.classList.remove('hidden');
+                updateApproverSelect(); // 确保审批人列表是最新的
+            } else {
+                approverContainer.classList.add('hidden');
+            }
+        }
+        
+        // 新增用户
+        function addUser(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('new-username').value;
+            const password = document.getElementById('new-user-password').value;
+            const role = document.getElementById('new-user-role').value;
+            
+            if (!username || !password) {
+                showToast('账号和密码不能为空', 'error');
+                return;
+            }
+            
+            // 检查用户名是否已存在
+            usersRef.once('value').then(snapshot => {
+                const users = snapshot.val() || {};
+                const userEntries = Object.values(users);
+                
+                if (userEntries.some(user => user.username === username)) {
+                    showToast('用户名已存在', 'error');
+                    return Promise.reject('用户名已存在');
+                }
+                
+                // 创建新用户对象
+                const newUser = {
+                    username: username,
+                    password: password,
+                    role: role
+                };
+                
+                // 如果是申请人，添加审批人信息
+                if (role === 'applicant') {
+                    const approver = document.getElementById('new-user-approver').value;
+                    if (!approver) {
+                        showToast('请选择审批人', 'error');
+                        return Promise.reject('请选择审批人');
+                    }
+                    newUser.approver = approver;
+                }
+                
+                // 添加到用户列表
+                const newUserRef = usersRef.push();
+                return newUserRef.set(newUser);
+            }).then(() => {
+                // 关闭模态框
+                closeAddUserModal();
+                
+                // 更新用户列表
+                loadUserList();
+                
+                showToast('用户创建成功', 'success');
+            }).catch(error => {
+                if (error !== '用户名已存在' && error !== '请选择审批人') {
+                    showToast('创建用户失败: ' + error.message, 'error');
+                }
+            });
+        }
+        
+        // 修改密码
+        function changePassword(event) {
+            event.preventDefault();
+            
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (!currentUser || !currentUser.id) {
+                showToast('请先登录', 'error');
+                return;
+            }
+            
+            const currentPassword = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            
+            // 验证当前密码
+            if (currentPassword !== currentUser.password) {
+                showToast('当前密码不正确', 'error');
+                return;
+            }
+            
+            // 验证新密码
+            if (newPassword !== confirmPassword) {
+                showToast('两次输入的新密码不一致', 'error');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                showToast('密码长度不能少于6位', 'error');
+                return;
+            }
+            
+            // 更新密码
+            usersRef.child(currentUser.id).update({
+                password: newPassword
+            }).then(() => {
+                // 更新当前用户信息
+                currentUser.password = newPassword;
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                
+                // 重置表单
+                document.getElementById('change-password-form').reset();
+                
+                showToast('密码修改成功', 'success');
+            }).catch(error => {
+                showToast('修改密码失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 加载所有请假数据（数据查看员）
+        function loadAllLeaveData() {
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.entries(leaves);
+                
+                // 转换并排序所有请假记录
+                let allLeaves = leaveEntries
+                    .map(([id, leave]) => ({ id, ...leave }))
+                    .sort((a, b) => new Date(b.applyTime) - new Date(a.applyTime));
+                
+                // 应用筛选
+                const statusFilter = document.getElementById('viewer-filter-status').value;
+                const typeFilter = document.getElementById('viewer-filter-type').value;
+                
+                if (statusFilter !== 'all') {
+                    allLeaves = allLeaves.filter(leave => leave.status === statusFilter);
+                }
+                
+                if (typeFilter !== 'all') {
+                    allLeaves = allLeaves.filter(leave => leave.type === typeFilter);
+                }
+                
+                const listContainer = document.getElementById('all-leave-list');
+                
+                // 更新统计
+                const allLeavesUnfiltered = leaveEntries.map(([id, leave]) => ({ id, ...leave }));
+                document.getElementById('pending-count').textContent = allLeavesUnfiltered.filter(l => l.status === 'pending').length;
+                document.getElementById('approved-count').textContent = allLeavesUnfiltered.filter(l => l.status === 'approved').length;
+                document.getElementById('rejected-count').textContent = allLeavesUnfiltered.filter(l => l.status === 'rejected').length;
+                
+                if (allLeaves.length === 0) {
+                    listContainer.innerHTML = `
+                        <tr class="text-center">
+                            <td colspan="6" class="px-3 py-6 text-gray-500">暂无请假记录</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                listContainer.innerHTML = '';
+                
+                allLeaves.forEach(leave => {
+                    let statusClass = '';
+                    let statusText = '';
+                    
+                    switch(leave.status) {
+                        case 'pending':
+                            statusClass = 'bg-yellow-100 text-yellow-800';
+                            statusText = '待审批';
+                            break;
+                        case 'approved':
+                            statusClass = 'bg-green-100 text-green-800';
+                            statusText = '已批准';
+                            break;
+                        case 'rejected':
+                            statusClass = 'bg-red-100 text-red-800';
+                            statusText = '已拒绝';
+                            break;
+                    }
+                    
+                    const startDateFormatted = formatDate(leave.startDate);
+                    const endDateFormatted = formatDate(leave.endDate);
+                    const applyTimeFormatted = formatDateTime(leave.applyTime);
+                    
+                    let dateRange = '';
+                    if (leave.startDate === leave.endDate) {
+                        dateRange = `${startDateFormatted} ${leave.startSession}`;
+                        if (leave.startSession !== leave.endSession) {
+                            dateRange += ` - ${leave.endSession}`;
+                        }
+                    } else {
+                        dateRange = `${startDateFormatted} ${leave.startSession} - ${endDateFormatted} ${leave.endSession}`;
+                    }
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.applicant}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.approver}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${leave.type}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">${dateRange}</td>
+                        <td class="px-3 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                                ${statusText}
+                            </span>
+                        </td>
+                        <td class="px-3 py-4 whitespace-nowrap">${applyTimeFormatted}</td>
+                    `;
+                    
+                    listContainer.appendChild(row);
+                });
+            }).catch(error => {
+                showToast('加载数据失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 初始化请假类型图表
+        function initLeaveTypeChart() {
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.values(leaves);
+                
+                // 统计各类型请假数量
+                const typeCounts = {};
+                leaveEntries.forEach(leave => {
+                    if (!typeCounts[leave.type]) {
+                        typeCounts[leave.type] = 0;
+                    }
+                    typeCounts[leave.type]++;
+                });
+                
+                // 准备图表数据
+                const labels = Object.keys(typeCounts);
+                const data = Object.values(typeCounts);
+                
+                // 生成随机颜色
+                const backgroundColors = labels.map(() => 
+                    `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.7)`
+                );
+                
+                // 创建图表
+                const ctx = document.getElementById('leave-type-chart').getContext('2d');
+                
+                // 如果已有图表实例，先销毁
+                if (window.leaveTypeChartInstance) {
+                    window.leaveTypeChartInstance.destroy();
+                }
+                
+                window.leaveTypeChartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: backgroundColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw || 0;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = Math.round((value / total) * 100);
+                                        return `${label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }).catch(error => {
+                showToast('生成图表失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 导出审批人数据
+        function exportApproverData() {
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (!currentUser || currentUser.role !== 'approver') return;
+            
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.entries(leaves);
+                
+                const approverLeaves = leaveEntries
+                    .map(([id, leave]) => ({ id, ...leave }))
+                    .filter(leave => leave.approver === currentUser.username);
+                
+                if (approverLeaves.length === 0) {
+                    showToast('没有可导出的数据', 'warning');
+                    return;
+                }
+                
+                // 转换为CSV格式
+                let csvContent = "申请人,请假类型,开始时间,结束时间,请假原因,状态,申请时间,审批时间,审批意见\n";
+                
+                approverLeaves.forEach(leave => {
+                    const startDateTime = `${formatDate(leave.startDate)} ${leave.startSession}`;
+                    const endDateTime = `${formatDate(leave.endDate)} ${leave.endSession}`;
+                    const applyTime = formatDateTime(leave.applyTime);
+                    let approveTime = '未审批';
+                    if (leave.approveTime) {
+                        approveTime = formatDateTime(leave.approveTime);
+                    }
+                    
+                    // 处理CSV中的逗号和引号
+                    const reason = leave.reason.replace(/"/g, '""');
+                    const comment = (leave.comment || '').replace(/"/g, '""');
+                    
+                    csvContent += `${leave.applicant},${leave.type},${startDateTime},${endDateTime},"${reason}",${getStatusText(leave.status)},${applyTime},${approveTime},"${comment}"\n`;
+                });
+                
+                // 创建并下载文件
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                saveAs(blob, `请假记录_${currentUser.username}_${new Date().toLocaleDateString()}.csv`);
+                
+                showToast('数据导出成功', 'success');
+            }).catch(error => {
+                showToast('导出数据失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 导出全部数据（数据查看员）
+        function exportAllData() {
+            leavesRef.once('value').then(snapshot => {
+                const leaves = snapshot.val() || {};
+                const leaveEntries = Object.entries(leaves);
+                
+                const allLeaves = leaveEntries.map(([id, leave]) => ({ id, ...leave }));
+                
+                if (allLeaves.length === 0) {
+                    showToast('没有可导出的数据', 'warning');
+                    return;
+                }
+                
+                // 转换为CSV格式
+                let csvContent = "申请人,审批人,请假类型,开始时间,结束时间,请假原因,紧急联系电话,状态,申请时间,审批时间,审批意见\n";
+                
+                allLeaves.forEach(leave => {
+                    const startDateTime = `${formatDate(leave.startDate)} ${leave.startSession}`;
+                    const endDateTime = `${formatDate(leave.endDate)} ${leave.endSession}`;
+                    const applyTime = formatDateTime(leave.applyTime);
+                    let approveTime = '未审批';
+                    if (leave.approveTime) {
+                        approveTime = formatDateTime(leave.approveTime);
+                    }
+                    
+                    // 处理CSV中的逗号和引号
+                    const reason = leave.reason.replace(/"/g, '""');
+                    const comment = (leave.comment || '').replace(/"/g, '""');
+                    
+                    csvContent += `${leave.applicant},${leave.approver},${leave.type},${startDateTime},${endDateTime},"${reason}",${leave.emergencyContact || ''},${getStatusText(leave.status)},${applyTime},${approveTime},"${comment}"\n`;
+                });
+                
+                // 创建并下载文件
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                saveAs(blob, `全校请假记录_${new Date().toLocaleDateString()}.csv`);
+                
+                showToast('数据导出成功', 'success');
+            }).catch(error => {
+                showToast('导出数据失败: ' + error.message, 'error');
+            });
+        }
+        
+        // 辅助函数：格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+        }
+        
+        // 辅助函数：格式化日期时间
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+        
+        // 辅助函数：获取状态文本
+        function getStatusText(status) {
+            switch(status) {
+                case 'pending': return '待审批';
+                case 'approved': return '已批准';
+                case 'rejected': return '已拒绝';
+                default: return status;
+            }
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化Firebase数据
+            initData();
+            
+            // 检查是否有当前登录用户
+            const currentUser = localStorage.getItem('currentUser');
+            if (currentUser) {
+                const user = JSON.parse(currentUser);
+                document.getElementById('current-user').textContent = user.username;
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('user-info').classList.add('flex');
+                
+                // 显示对应页面
+                switch(user.role) {
+                    case 'applicant':
+                        showPage('applicant-page');
+                        loadApplicantLeaveHistory();
+                        break;
+                    case 'approver':
+                        showPage('approver-page');
+                        loadApproverLeaveList();
+                        break;
+                    case 'admin':
+                        showPage('admin-page');
+                        loadUserList();
+                        break;
+                    case 'viewer':
+                        showPage('viewer-page');
+                        loadAllLeaveData();
+                        initLeaveTypeChart();
+                        break;
+                    default:
+                        showPage('login-page');
+                }
+            } else {
+                showPage('login-page');
+            }
+            
+            // 事件监听
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
+            document.getElementById('logout-btn').addEventListener('click', handleLogout);
+            document.getElementById('leave-form').addEventListener('submit', submitLeaveApplication);
+            document.getElementById('reset-leave-form').addEventListener('click', () => {
+                document.getElementById('leave-form').reset();
+            });
+            
+            // 审批端筛选
+            document.getElementById('filter-status').addEventListener('change', loadApproverLeaveList);
+            document.getElementById('filter-type').addEventListener('change', loadApproverLeaveList);
+            
+            // 查看员筛选
+            document.getElementById('viewer-filter-status').addEventListener('change', loadAllLeaveData);
+            document.getElementById('viewer-filter-type').addEventListener('change', loadAllLeaveData);
+            
+            // 关闭模态框
+            document.getElementById('close-modal').addEventListener('click', closeDetailModal);
+            document.getElementById('close-add-user-modal').addEventListener('click', closeAddUserModal);
+            
+            // 管理员相关
+            document.getElementById('add-user-btn').addEventListener('click', showAddUserModal);
+            document.getElementById('add-user-form').addEventListener('submit', addUser);
+            document.getElementById('new-user-role').addEventListener('change', handleUserRoleChange);
+            document.getElementById('change-password-form').addEventListener('submit', changePassword);
+            
+            // 管理端标签切换
+            document.getElementById('tab-user-management').addEventListener('click', () => {
+                document.getElementById('content-user-management').classList.remove('hidden');
+                document.getElementById('content-password-change').classList.add('hidden');
+                document.getElementById('tab-user-management').classList.add('text-primary', 'border-b-2', 'border-primary', 'font-medium');
+                document.getElementById('tab-user-management').classList.remove('text-gray-500');
+                document.getElementById('tab-password-change').classList.remove('text-primary', 'border-b-2', 'border-primary', 'font-medium');
+                document.getElementById('tab-password-change').classList.add('text-gray-500');
+            });
+            
+            document.getElementById('tab-password-change').addEventListener('click', () => {
+                document.getElementById('content-user-management').classList.add('hidden');
+                document.getElementById('content-password-change').classList.remove('hidden');
+                document.getElementById('tab-user-management').classList.remove('text-primary', 'border-b-2', 'border-primary', 'font-medium');
+                document.getElementById('tab-user-management').classList.add('text-gray-500');
+                document.getElementById('tab-password-change').classList.add('text-primary', 'border-b-2', 'border-primary', 'font-medium');
+                document.getElementById('tab-password-change').classList.remove('text-gray-500');
+            });
+            
+            // 导出数据
+            document.getElementById('export-approver-data').addEventListener('click', exportApproverData);
+            document.getElementById('export-all-data').addEventListener('click', exportAllData);
+            
+            // 设置今天为默认日期
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('start-date').value = today;
+            document.getElementById('end-date').value = today;
+        });
+    </script>
+</body>
+</html>
